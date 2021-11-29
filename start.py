@@ -72,6 +72,8 @@ time_to_start = 185
 time_running = False
 update_tv = False
 display_horn = False
+display_class = "down"
+display_papa = "down"
 
 def make_horn_brighter(im):
     s = im.split()
@@ -79,8 +81,8 @@ def make_horn_brighter(im):
     # mask = s[A].point(lambda i: i>100 and 255)
     # out = s[G].point(lambda i: i+80)
     # s[G].paste(out,None,mask)
-    s[B].paste(s[A]) 
-    s[R].paste(s[A]) 
+    s[G].paste(s[A]) 
+    # s[R].paste(s[A]) 
     im = Image.merge(im.mode,s)
     return im
     
@@ -91,37 +93,62 @@ def make_horn_brighter(im):
 #     print(f'{time.perf_counter_ns()/1000000)}
 
 async def long():
+
+    global display_horn
+    global update_tv
     # turn on output
-    print('long ON')
+    display_horn = True
+    update_tv = True
     await asyncio.sleep(1)
-    print('long OFF')
+    display_horn = False
+    update_tv = True
+    # print('long OFF')
     # turn off output
 async def short():
+    global display_horn
+    global update_tv
     # turn on output
-    print('short ON')
+    display_horn = True
+    update_tv = True
     await asyncio.sleep(0.3)
-    print('short OFF')
+    display_horn = False
+    update_tv = True    
+    # print('short OFF')
     # turn off output
+async def pause():
+    await asyncio.sleep(0.5)
+async def papa_up():
+    global display_papa
+    display_papa = 'up'
+async def papa_down():
+    global display_papa
+    display_papa = 'down'
+async def class_up():
+    global display_class
+    display_class = 'up'
+async def class_down():
+    global display_class
+    display_class = 'down'
     
 horn_pattern = dict()
-horn_pattern[180] = [long,long,long]
-horn_pattern[120] = [long,long]
-horn_pattern[90] = [long,short,short,short]
-horn_pattern[60] = [long]
-horn_pattern[30] = [short,short,short]
-horn_pattern[20] = [short,short]
+horn_pattern[180] = [class_up,papa_down,long,pause,long,pause,long]
+horn_pattern[120] = [papa_up,long,pause,long]
+horn_pattern[90] = [long,pause,short,pause,short,pause,short]
+horn_pattern[60] = [papa_down,long]
+horn_pattern[30] = [short,pause,short,pause,short]
+horn_pattern[20] = [short,pause,short]
 horn_pattern[10] = [short]
 horn_pattern[5] = [short]
 horn_pattern[4] = [short]
 horn_pattern[3] = [short]
 horn_pattern[2] = [short]
 horn_pattern[1] = [short]
-horn_pattern[0] = [long]
+horn_pattern[0] = [class_down,long]
 
 async def update_time():
     global time_running
     global time_to_start
-    print('start update_time')
+    # print('start update_time')
     while True:
         await asyncio.sleep(1)
         # print('utr', time_running)
@@ -133,15 +160,15 @@ async def update_time():
 async def update_time_image():
     global draw_image
     global update_tv
-    print('start update_time_image')
+    # print('start update_time_image')
     displayed_time = -1
-    background = Image.open("sailstart.JPG").resize((240,135),Image.LANCZOS)
+    background = Image.open("sailstart.JPG").resize((240,135),Image.LANCZOS).point(lambda i: i-80)
     tv_box = (0,0,240,135)
     while True:
         await asyncio.sleep(0.05)
         if displayed_time != time_to_start:
             # print(f"update_time_image {time_to_start=}")  
-            print("start updatetime", time.perf_counter_ns()/1000000)         
+            # print("start updatetime", time.perf_counter_ns()/1000000)         
             displayed_time = time_to_start
             draw_image = background.crop(tv_box)
             # draw_image = Image.open("sailstart.JPG").resize((240,135))
@@ -149,39 +176,61 @@ async def update_time_image():
             y = top
             ImageDraw.Draw(draw_image).text((x,y), f"{abs(time_to_start)//60}:{abs(time_to_start)%60:02}", font=font, fill=( "#80FF80" if time_to_start<0 else "#FF00FF"))
             update_tv = True
-            print("end   updatetime", time.perf_counter_ns()/1000000)
+            # print("end   updatetime", time.perf_counter_ns()/1000000)
 
 async def write_to_tv():
     global update_tv
     global draw_image
     global display_horn
-    print('start write_to_tv')
+    global display_class
+    global display_papa
+    
+    # print('start write_to_tv')
     horn_image = Image.open("horn5.png").resize((60,60))
     horn_image = make_horn_brighter(horn_image)
-    horn_box = (170,0,230,60)
+    class_image = Image.open("class2.png")
+    # print(class_image)
+    class_image = class_image.convert("RGB").filter(ImageFilter.RankFilter(5,3)).resize((40,40))
+    papa_image = Image.open("International_Maritime_Signal_Flag_Papa_clip_art_small.png").resize((40,40))
     tv_box = (0,0,240,135)
+    horn_box = (0,70,60,130)
+    class_box = (180,20,220,60)
+    papa_box = (140,20,180,60)
+
+    def shift_box(box,shift):
+        return tuple(b+s for b,s in zip(box,shift))
     while True:
         await asyncio.sleep(0.01)
         if update_tv:
-            print("start draw", time.perf_counter_ns()/1000000)
+            # print("start draw", time.perf_counter_ns()/1000000)
             display_image = draw_image.crop(tv_box)
             update_tv = False
             # print('write_to_tv')
             if display_horn:
-                display_image.paste(horn_image,horn_box,horn_image)
+                display_image.paste(horn_image,horn_box)
+            if display_class == 'up':
+                display_image.paste(class_image,class_box)
+            if display_class == 'down':
+                display_image.paste(class_image,shift_box(class_box,(0,40,0,40)))
+            if display_papa == 'up':
+                display_image.paste(papa_image,papa_box) 
+            if display_papa == 'down':
+                display_image.paste(papa_image,shift_box(papa_box,(0,40,0,40)))                   
+                
+                
             # print("start disp", time.perf_counter_ns()/1000000)
             # bob = display_image.rotate(90)
             # print(display_image,bob)
             # print("mid draw  ", time.perf_counter_ns()/1000000)
             disp.image(display_image, rotation)
-            print("end draw  ", time.perf_counter_ns()/1000000)
+            # print("end draw  ", time.perf_counter_ns()/1000000)
             
 async def horn():
     global time_to_start
     global display_horn
     global horn_pattern
     global update_tv
-    print('start horn')
+    # print('start horn')
     horn_q = []
     last_processed_time = 0
     post_beep_wait = 0.5
@@ -191,19 +240,14 @@ async def horn():
             last_processed_time = time_to_start
             horn_q = horn_pattern.get(time_to_start,[])
             for beep in horn_q:
-                display_horn = True
-                update_tv = True
-                # turn on horn output
                 await beep()
-                display_horn = False
-                update_tv = True
-                await asyncio.sleep(post_beep_wait)
+
 
 async def ui():
     global time_running
     global time_to_start
-    print('start ui')
-    time_to_start = 15
+    # print('start ui')
+    time_to_start = 185
     time_running = False
     backlight_state = True
     
@@ -213,7 +257,7 @@ async def ui():
             if (buttonA.value==0) and (buttonB.value==0):
                 time_to_start = 185
                 time_running = False
-                print(f'{time_running=}')
+                print(f'sailstart reset by button')
                 await asyncio.sleep(2) # just so it doesn't immediately look for start
             elif (buttonA.value==0) or (buttonB.value==0):
                 backlight_state = not backlight_state
@@ -222,7 +266,7 @@ async def ui():
         else:
             if (buttonA.value==0) or (buttonA.value==0):
                 time_running = True
-                print(f'{time_running=}')
+                print(f'sailstart start by button')
                 await asyncio.sleep(1)
 
 async def main():
@@ -238,12 +282,6 @@ async def main():
                          update_time_image(),
                          update_time())
 
-    
-
-        
-    
-
-
-
+ 
 if __name__ == "__main__":
     asyncio.run(main())
